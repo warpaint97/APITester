@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>restUI - Simple API Tester</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+
+        /* Syntax Highlighting */
+        .string { color: #a5d6ff; }
+        .number { color: #d2a8ff; }
+        .boolean { color: #ff7b72; }
+        .null { color: #ff7b72; }
+        .key { color: #7ee787; }
+
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Navbar -->
+    <nav class="bg-slate-900 border-b border-slate-700 h-14 flex items-center px-6 justify-between flex-shrink-0">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-bolt text-blue-500 text-xl"></i>
+            <span class="font-bold text-lg tracking-tight">rest<span class="text-blue-500">UI</span></span>
+        </div>
+        <div class="text-xs text-slate-400">
+            Standalone API Client
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Left Panel: Request -->
+        <div class="w-full md:w-1/2 flex flex-col border-r border-slate-700 bg-slate-800/50">
+            
+            <!-- URL Bar -->
+            <div class="p-4 border-b border-slate-700 bg-slate-800 relative z-20">
+                <div class="relative">
+                    <div class="flex gap-0 shadow-lg rounded-lg overflow-hidden border border-slate-600 focus-within:border-blue-500 transition-colors">
+                        <select id="method" class="bg-slate-700 text-white font-bold px-4 py-3 outline-none cursor-pointer hover:bg-slate-600 transition-colors appearance-none text-sm w-28 text-center border-r border-slate-600">
+                            <option value="GET" class="text-green-400">GET</option>
+                            <option value="POST" class="text-yellow-400">POST</option>
+                            <option value="PUT" class="text-blue-400">PUT</option>
+                            <option value="PATCH" class="text-purple-400">PATCH</option>
+                            <option value="DELETE" class="text-red-400">DELETE</option>
+                        </select>
+                        <input type="text" id="url" placeholder="https://api.example.com/v1/users" class="flex-1 bg-slate-900 text-white px-4 py-3 outline-none font-mono text-sm placeholder-slate-500" value="http://127.0.0.1:8000/image">
+                        
+                        <!-- History Button -->
+                        <button id="historyBtn" class="bg-slate-800 text-slate-400 px-3 hover:text-white border-l border-slate-700 hover:bg-slate-700 transition-colors" title="Recent Requests">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </button>
+
+                        <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 font-semibold transition-colors flex items-center justify-center gap-2 min-w-[100px]">
+                            <span id="btnText">Send</span>
+                            <div id="btnLoader" class="loader hidden"></div>
+                        </button>
+                    </div>
+
+                    <!-- History Dropdown -->
+                    <div id="historyDropdown" class="hidden absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-600 rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto z-50">
+                        <div class="p-2 text-xs text-slate-500 font-bold uppercase tracking-wider border-b border-slate-700 bg-slate-800 sticky top-0">Recent Requests</div>
+                        <div id="historyList">
+                            <!-- Items injected here -->
+                            <div class="p-4 text-center text-slate-500 text-sm italic">No history yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-slate-700 bg-slate-800">
+                <button class="tab-btn px-6 py-3 text-sm font-medium text-blue-400 border-b-2 border-blue-500 hover:bg-slate-700/50 transition-colors" onclick="switchTab('body')">Body (JSON)</button>
+                <button class="tab-btn px-6 py-3 text-sm font-medium text-slate-400 border-b-2 border-transparent hover:text-slate-200 hover:bg-slate-700/50 transition-colors" onclick="switchTab('headers')">Headers</button>
+            </div>
+
+            <!-- Input Area -->
+            <div class="flex-1 relative bg-slate-900">
+                
+                <!-- JSON Body Input -->
+                <div id="tab-body" class="absolute inset-0 p-4 flex flex-col">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs text-slate-400 uppercase font-bold tracking-wider">Request Body</label>
+                        <button onclick="prettifyInput()" class="text-xs text-blue-400 hover:text-blue-300"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Prettify</button>
+                    </div>
+                    <textarea id="jsonInput" class="flex-1 w-full bg-slate-800 text-slate-200 p-4 rounded-md font-mono text-sm outline-none border border-slate-700 focus:border-slate-500 resize-none" spellcheck="false" placeholder="{ &quot;key&quot;: &quot;value&quot; }"></textarea>
+                    <div class="mt-2 text-xs text-slate-500">
+                        <i class="fa-solid fa-circle-info mr-1"></i> Body is usually ignored for GET requests.
+                    </div>
+                </div>
+
+                <!-- Headers Input -->
+                <div id="tab-headers" class="absolute inset-0 p-4 flex flex-col hidden">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs text-slate-400 uppercase font-bold tracking-wider">Headers (JSON format)</label>
+                    </div>
+                    <textarea id="headersInput" class="flex-1 w-full bg-slate-800 text-slate-200 p-4 rounded-md font-mono text-sm outline-none border border-slate-700 focus:border-slate-500 resize-none" spellcheck="false">{
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+}</textarea>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Right Panel: Response -->
+        <div class="w-full md:w-1/2 flex flex-col bg-slate-950 h-full">
+            
+            <!-- Response Meta Bar -->
+            <div class="h-14 border-b border-slate-800 flex items-center justify-between px-4 bg-slate-900/50 overflow-x-auto">
+                <span class="text-sm font-semibold text-slate-300 mr-4">Response</span>
+                <div class="flex gap-2 text-xs font-mono whitespace-nowrap" id="responseMeta">
+                    <div class="flex items-center gap-2 opacity-0 transition-opacity duration-300" id="metaContainer">
+                        <span class="bg-slate-800 px-2 py-1 rounded text-slate-300 border border-slate-700">
+                            Status: <span id="statusCode" class="font-bold text-green-400">-</span>
+                        </span>
+                        <span class="bg-slate-800 px-2 py-1 rounded text-slate-300 border border-slate-700">
+                            Time: <span id="responseTime" class="font-bold text-blue-400">-</span>
+                        </span>
+                        <span class="bg-slate-800 px-2 py-1 rounded text-slate-300 border border-slate-700">
+                            Size: <span id="responseSize" class="font-bold text-purple-400">-</span>
+                        </span>
+                        <span id="contentTypeBadge" class="hidden md:inline-block px-2 py-1 rounded text-slate-400 bg-slate-800/50 border border-slate-800">
+                            JSON
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Response Body -->
+            <div class="flex-1 relative overflow-auto p-0">
+                <div id="responsePlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-600">
+                    <i class="fa-solid fa-paper-plane text-4xl mb-4 opacity-50"></i>
+                    <p class="text-sm">Enter URL and hit Send</p>
+                </div>
+                <div id="responseOutputContainer" class="hidden h-full flex flex-col">
+                     <!-- Image previews will be injected here -->
+                     <div id="imagePreviewContainer" class="bg-slate-900 border-b border-slate-800 hidden"></div>
+                     <pre id="responseOutput" class="flex-1 p-4 font-mono text-sm leading-relaxed outline-none overflow-auto" tabindex="0"></pre>
+                </div>
+            </div>
+
+            <!-- Clipboard Action -->
+            <div class="border-t border-slate-800 p-2 bg-slate-900 flex justify-end">
+                <button onclick="copyResponse()" class="text-xs flex items-center gap-2 px-3 py-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-regular fa-copy"></i> Copy Response
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-red-500 text-white px-4 py-3 rounded shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3 font-medium text-sm">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span id="toastMsg">Error message</span>
+    </div>
+
+    <script>
+        // DOM Elements
+        const methodSelect = document.getElementById('method');
+        const urlInput = document.getElementById('url');
+        const sendBtn = document.getElementById('sendBtn');
+        const btnText = document.getElementById('btnText');
+        const btnLoader = document.getElementById('btnLoader');
+        const jsonInput = document.getElementById('jsonInput');
+        const headersInput = document.getElementById('headersInput');
+        const historyBtn = document.getElementById('historyBtn');
+        const historyDropdown = document.getElementById('historyDropdown');
+        const historyList = document.getElementById('historyList');
+        
+        const responseOutputContainer = document.getElementById('responseOutputContainer');
+        const responseOutput = document.getElementById('responseOutput');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        const responsePlaceholder = document.getElementById('responsePlaceholder');
+        
+        const metaContainer = document.getElementById('metaContainer');
+        const statusCodeEl = document.getElementById('statusCode');
+        const responseTimeEl = document.getElementById('responseTime');
+        const responseSizeEl = document.getElementById('responseSize');
+        const contentTypeBadge = document.getElementById('contentTypeBadge');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+
+        // Color helper
+        const methodColors = {
+            'GET': 'text-green-400',
+            'POST': 'text-yellow-400',
+            'PUT': 'text-blue-400',
+            'PATCH': 'text-purple-400',
+            'DELETE': 'text-red-400'
+        };
+
+        // Initialize History
+        let apiHistory = JSON.parse(localStorage.getItem('restUI_history')) || [];
+
+        // Color code methods
+        methodSelect.addEventListener('change', updateMethodColor);
+        function updateMethodColor() {
+            methodSelect.className = `bg-slate-700 font-bold px-4 py-3 outline-none cursor-pointer hover:bg-slate-600 transition-colors appearance-none text-sm w-28 text-center border-r border-slate-600 ${methodColors[methodSelect.value] || 'text-white'}`;
+        }
+        updateMethodColor(); // Init
+
+        // Tab Switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('text-blue-400', 'border-blue-500');
+                btn.classList.add('text-slate-400', 'border-transparent');
+            });
+            event.target.classList.add('text-blue-400', 'border-blue-500');
+            event.target.classList.remove('text-slate-400', 'border-transparent');
+
+            document.getElementById('tab-body').classList.add('hidden');
+            document.getElementById('tab-headers').classList.add('hidden');
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+        }
+
+        // History Management
+        historyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            historyDropdown.classList.toggle('hidden');
+            renderHistory();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!historyDropdown.contains(e.target) && e.target !== historyBtn) {
+                historyDropdown.classList.add('hidden');
+            }
+        });
+
+        function saveToHistory(method, url) {
+            // Remove exact duplicate if exists
+            apiHistory = apiHistory.filter(item => !(item.method === method && item.url === url));
+            // Add to top
+            apiHistory.unshift({ method, url });
+            // Keep max 15
+            if (apiHistory.length > 15) apiHistory.pop();
+            // Save
+            localStorage.setItem('restUI_history', JSON.stringify(apiHistory));
+        }
+
+        function renderHistory() {
+            if (apiHistory.length === 0) {
+                historyList.innerHTML = '<div class="p-4 text-center text-slate-500 text-sm italic">No history yet</div>';
+                return;
+            }
+
+            historyList.innerHTML = apiHistory.map((item, index) => `
+                <div class="px-4 py-3 hover:bg-slate-700 cursor-pointer flex items-center gap-3 border-b border-slate-700/50 last:border-0 group" onclick="loadHistoryItem(${index})">
+                    <span class="font-bold text-xs w-12 ${methodColors[item.method]}">${item.method}</span>
+                    <span class="text-sm text-slate-300 font-mono truncate flex-1" title="${item.url}">${item.url}</span>
+                    <i class="fa-solid fa-arrow-trend-up text-slate-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                </div>
+            `).join('');
+        }
+
+        window.loadHistoryItem = (index) => {
+            const item = apiHistory[index];
+            if (item) {
+                methodSelect.value = item.method;
+                urlInput.value = item.url;
+                updateMethodColor();
+                historyDropdown.classList.add('hidden');
+            }
+        };
+
+        // Send Request Logic
+        sendBtn.addEventListener('click', async () => {
+            const url = urlInput.value.trim();
+            const method = methodSelect.value;
+            
+            if (!url) {
+                showToast('Please enter a valid URL');
+                return;
+            }
+
+            // Save to history
+            saveToHistory(method, url);
+
+            // Set Loading State
+            setLoading(true);
+            responseOutputContainer.classList.add('hidden');
+            responsePlaceholder.classList.remove('hidden');
+            metaContainer.classList.remove('opacity-100');
+            imagePreviewContainer.classList.add('hidden');
+            imagePreviewContainer.innerHTML = '';
+
+            const startTime = performance.now();
+
+            try {
+                // Prepare Headers
+                let headers = {};
+                try {
+                    headers = JSON.parse(headersInput.value);
+                } catch (e) {
+                    showToast('Invalid JSON in Headers');
+                    setLoading(false);
+                    return;
+                }
+
+                // Prepare Options
+                const options = {
+                    method: method,
+                    headers: headers
+                };
+
+                // Add Body for non-GET requests
+                if (method !== 'GET' && method !== 'HEAD') {
+                    const bodyText = jsonInput.value.trim();
+                    if (bodyText) {
+                        try {
+                            // Validate JSON
+                            JSON.parse(bodyText); 
+                            options.body = bodyText;
+                        } catch (e) {
+                            showToast('Invalid JSON in Request Body');
+                            setLoading(false);
+                            return;
+                        }
+                    }
+                }
+
+                // Execute Fetch
+                const response = await fetch(url, options);
+                const endTime = performance.now();
+                const duration = (endTime - startTime).toFixed(0);
+
+                // Handle Response Content
+                let data;
+                let size = 0;
+                const contentType = response.headers.get("content-type") || "";
+
+                // CHECK 1: Is it a direct image response?
+                if (contentType.startsWith('image/')) {
+                    const blob = await response.blob();
+                    size = blob.size;
+                    data = blob; // Flag as blob for renderer
+                } 
+                // CHECK 2: Is it JSON?
+                else if (contentType.includes("application/json")) {
+                    data = await response.json();
+                    // Calculate size
+                    const textData = JSON.stringify(data);
+                    size = new TextEncoder().encode(textData).length;
+                } 
+                // CHECK 3: Text/HTML
+                else {
+                    data = await response.text();
+                    size = new TextEncoder().encode(data).length;
+                }
+
+                // Update UI
+                renderResponse(data, response.status, duration, size, contentType);
+
+            } catch (error) {
+                console.error(error);
+                
+                let errorDetails = {
+                    error: "Network Connection Failed",
+                    message: error.message
+                };
+
+                // Add helpful context for common local development errors
+                if (error.message === "Failed to fetch" || error.message.includes("NetworkError")) {
+                    errorDetails.possible_causes = [
+                        "CORS Policy: Your FastAPI server is blocking the request. (Missing CORSMiddleware)",
+                        "Mixed Content: You are on HTTPS but trying to call HTTP (localhost).",
+                        "Server Unreachable: Is http://127.0.0.1:8000 running?"
+                    ];
+                    errorDetails.solution_tip = "Add 'CORSMiddleware' to your FastAPI app with allow_origins=['*'].";
+                }
+
+                renderResponse(errorDetails, 0, 0, 0, null);
+                showToast('Connection Failed: See response window');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 B';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function renderResponse(data, status, time, size, contentType) {
+            responsePlaceholder.classList.add('hidden');
+            responseOutputContainer.classList.remove('hidden');
+            metaContainer.classList.add('opacity-100');
+
+            // 1. Status Code
+            statusCodeEl.innerText = status || 'ERR';
+            if(status >= 200 && status < 300) statusCodeEl.className = 'font-bold text-green-400';
+            else if(status >= 400 && status < 500) statusCodeEl.className = 'font-bold text-yellow-400';
+            else if(status >= 500) statusCodeEl.className = 'font-bold text-red-500';
+            else statusCodeEl.className = 'font-bold text-slate-400';
+
+            // 2. Response Time
+            responseTimeEl.innerText = `${time}ms`;
+            if (time < 300) responseTimeEl.className = 'font-bold text-green-400';
+            else if (time < 800) responseTimeEl.className = 'font-bold text-yellow-400';
+            else responseTimeEl.className = 'font-bold text-red-400';
+
+            // 3. Response Size
+            responseSizeEl.innerText = formatBytes(size);
+
+            // 4. Content Type Badge
+            if(contentType) {
+                contentTypeBadge.innerText = contentType.split(';')[0];
+                contentTypeBadge.classList.remove('hidden');
+            } else {
+                contentTypeBadge.classList.add('hidden');
+            }
+
+            // 5. Render Body
+            if (data instanceof Blob) {
+                // Handle Blob Image
+                const imageUrl = URL.createObjectURL(data);
+                imagePreviewContainer.innerHTML = `
+                    <div class="p-6 flex flex-col items-center justify-center">
+                         <img src="${imageUrl}" class="max-w-full rounded-lg shadow-2xl border border-slate-700" style="max-height: 400px; object-fit: contain;">
+                         <div class="mt-3 text-xs text-slate-400">
+                            Image Preview (${data.type})
+                         </div>
+                    </div>
+                `;
+                imagePreviewContainer.classList.remove('hidden');
+                responseOutput.textContent = `[Binary Blob Data: ${formatBytes(size)}]`;
+            } 
+            else if (typeof data === 'object') {
+                // Handle JSON + Smart Base64 Preview
+                responseOutput.innerHTML = syntaxHighlight(data);
+                
+                // Smart scan for base64 images in JSON
+                let previews = '';
+                let hasPreview = false;
+                
+                // Scan top-level keys
+                for (const [key, value] of Object.entries(data)) {
+                    // Heuristic: string, long enough to be an image, key suggests image
+                    if (typeof value === 'string' && value.length > 50) {
+                        const keyLower = key.toLowerCase();
+                        if (keyLower.includes('image') || keyLower.includes('img') || keyLower.includes('base64') || value.startsWith('data:image')) {
+                            
+                            let src = value;
+                            if (!src.startsWith('data:')) {
+                                // Guess it's a raw base64 string, default to png for safety
+                                src = `data:image/png;base64,${value}`; 
+                            }
+                            
+                            previews += `
+                                <div class="inline-flex flex-col items-center bg-slate-800 p-2 rounded border border-slate-700 mx-2 mb-2">
+                                    <img src="${src}" class="h-32 w-auto object-contain rounded bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAQUlEQVQYV2NkYGCQYcCAQwYGBgYGOAApMjCwOQA5jCgK0AXA/g8TB5uDrR+dD7MHm0+w+RTrR+aD7MHmE2w+xfYDAJ0sBAWjZ/XCAAAAAElFTkSuQmCC')]">
+                                    <span class="text-[10px] text-slate-400 mt-1 font-mono">${key}</span>
+                                </div>
+                            `;
+                            hasPreview = true;
+                        }
+                    }
+                }
+
+                if (hasPreview) {
+                    imagePreviewContainer.innerHTML = `<div class="p-4 flex flex-wrap justify-center bg-slate-900/50">${previews}</div>`;
+                    imagePreviewContainer.classList.remove('hidden');
+                }
+            } 
+            else {
+                responseOutput.textContent = data; // Plain text
+            }
+        }
+
+        // Helper: Prettify Input JSON
+        function prettifyInput() {
+            try {
+                const val = jsonInput.value;
+                if(!val) return;
+                const parsed = JSON.parse(val);
+                jsonInput.value = JSON.stringify(parsed, null, 4);
+            } catch(e) {
+                showToast('Invalid JSON, cannot prettify');
+            }
+        }
+
+        // Helper: Syntax Highlighting for Output
+        function syntaxHighlight(json) {
+            if (typeof json != 'string') {
+                json = JSON.stringify(json, undefined, 4);
+            }
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                var cls = 'number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'key';
+                    } else {
+                        cls = 'string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function setLoading(isLoading) {
+            if(isLoading) {
+                sendBtn.disabled = true;
+                sendBtn.classList.add('opacity-75', 'cursor-not-allowed');
+                btnText.classList.add('hidden');
+                btnLoader.classList.remove('hidden');
+            } else {
+                sendBtn.disabled = false;
+                sendBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                btnText.classList.remove('hidden');
+                btnLoader.classList.add('hidden');
+            }
+        }
+
+        function showToast(message) {
+            toastMsg.innerText = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function copyResponse() {
+            const text = responseOutput.innerText;
+            if(!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = toastMsg.innerText; // Hacky reuse of toast
+                showToast('Copied to clipboard!');
+            });
+        }
+    </script>
+</body>
+</html>
